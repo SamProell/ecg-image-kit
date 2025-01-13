@@ -79,8 +79,8 @@ def get_paper_ecg(input_file,header_file,output_directory, seed, add_dc_pulse,ad
     start = 0
     lead_length_in_seconds = configs['paper_len']/columns
     abs_lead_step = configs['abs_lead_step']
-    format_4_by_3 = configs['format_4_by_3']
-    
+    leads_layout = configs.get("leads_layout", configs['format_4_by_3'])
+
     segmented_ecg_data = {}
 
     if start_index != -1:
@@ -108,12 +108,13 @@ def get_paper_ecg(input_file,header_file,output_directory, seed, add_dc_pulse,ad
                         segmented_ecg_data[key] = segmented_ecg_data[key] + nanArray.tolist()
             else:
                 shiftedStart = start
-                if columns == 4 and key in format_4_by_3[1]:
+                if columns > 1 and key in leads_layout[1]:
                     shiftedStart = start + int(rate*lead_length_in_seconds)
-                elif columns == 4 and key in format_4_by_3[2]:
+                elif columns > 2 and key in leads_layout[2]:
                     shiftedStart = start + int(2*rate*lead_length_in_seconds)
-                elif columns == 4 and key in format_4_by_3[3]:
+                elif columns > 3 and key in leads_layout[3]:
                     shiftedStart = start + int(3*rate*lead_length_in_seconds)
+                        
                 end = shiftedStart + int(rate*lead_length_in_seconds)
 
                 if(key!='full'+full_mode):
@@ -125,7 +126,7 @@ def get_paper_ecg(input_file,header_file,output_directory, seed, add_dc_pulse,ad
                         nanArray[:] = np.nan
                     else:
                         nanArray[:] = record_dict[key][start: shiftedStart]
-                    if columns == 4 and key not in format_4_by_3[0]:
+                    if columns > 1 and key not in leads_layout[0]:
                         if key not in segmented_ecg_data.keys():
                             segmented_ecg_data[key] = nanArray.tolist()
                         else:
@@ -187,11 +188,11 @@ def get_paper_ecg(input_file,header_file,output_directory, seed, add_dc_pulse,ad
                             segmented_ecg_data[key] = segmented_ecg_data[key] + nanArray.tolist()
                 else:
                     shiftedStart = start
-                    if columns == 4 and key in format_4_by_3[1]:
+                    if columns > 1 and key in leads_layout[1]:
                         shiftedStart = start + int(rate*lead_length_in_seconds)
-                    elif columns == 4 and key in format_4_by_3[2]:
+                    elif columns > 2 and key in leads_layout[2]:
                         shiftedStart = start + int(2*rate*lead_length_in_seconds)
-                    elif columns == 4 and key in format_4_by_3[3]:
+                    elif columns > 3 and key in leads_layout[3]:
                         shiftedStart = start + int(3*rate*lead_length_in_seconds)
                     end = shiftedStart + int(rate*lead_length_in_seconds)
                     
@@ -205,7 +206,7 @@ def get_paper_ecg(input_file,header_file,output_directory, seed, add_dc_pulse,ad
                         else:
                             nanArray[:] = record_dict[key][start: shiftedStart]
 
-                        if columns == 4 and key not in format_4_by_3[0]:
+                        if columns > 1 and key not in leads_layout[0]:
                             if key not in segmented_ecg_data.keys():
                                 segmented_ecg_data[key] = nanArray.tolist()
                             else:

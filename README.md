@@ -1,3 +1,12 @@
+**forked from https://github.com/alphanumericslab/ecg-image-kit**
+
+Notable modifications:
+- modified ecg-image-generator to properly handle other layouts, like 6x2:  
+  For this, `get_paper_ecg` in `extract_leads` was modified to handle layouts with up to
+  4 instead of exactly 4 columns. This additionally requires some setup in the config
+  file. (see `config2x6.yaml`)
+
+
 # `ECG-Image-Kit`
 ***A toolkit for synthesis, analysis, and digitization of electrocardiogram images***
 
