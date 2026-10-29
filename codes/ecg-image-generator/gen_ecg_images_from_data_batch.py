@@ -1,6 +1,10 @@
 import os, sys, argparse
 import random
 import csv
+import numpy as np
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from copy import copy
+from tqdm import tqdm
 from helper_functions import find_records
 from gen_ecg_image_from_data import run_single_file
 import warnings
@@ -15,6 +19,8 @@ def get_parser():
     parser.add_argument('-se', '--seed', type=int, required=False, default = -1)
     parser.add_argument('--num_leads',type=str,default='twelve')
     parser.add_argument('--max_num_images',type=int,default = -1)
+    parser.add_argument('--run_in_parallel', action='store_true')
+    parser.add_argument('--num_workers', type=int, default=1)
     parser.add_argument('--config_file', type=str, default='config.yaml')
     
     parser.add_argument('-r','--resolution',type=int,required=False,default = 200)
@@ -73,6 +79,11 @@ def get_parser():
 
     return parser
 
+def run_record(args):
+        random.seed(args.seed)
+        np.random.seed(args.seed % (2**32))
+        return run_single_file(args)
+
 def run(args):
         random.seed(args.seed)
 
@@ -89,24 +100,36 @@ def run(args):
         if os.path.exists(original_output_dir) == False:
             os.makedirs(original_output_dir)
 
-        i = 0
+        records = []
         full_header_files, full_recording_files = find_records(args.input_directory, original_output_dir)
         
         for full_header_file, full_recording_file in zip(full_header_files, full_recording_files):
             filename = full_recording_file
             header = full_header_file
-            args.input_file = os.path.join(args.input_directory, filename)
-            args.header_file = os.path.join(args.input_directory, header)
-            args.start_index = -1
+            record_args = copy(args)
+            record_args.input_file = os.path.join(args.input_directory, filename)
+            record_args.header_file = os.path.join(args.input_directory, header)
+            record_args.start_index = -1
             
             folder_struct_list = full_header_file.split('/')[:-1]
-            args.output_directory = os.path.join(original_output_dir, '/'.join(folder_struct_list))
-            args.encoding = os.path.split(os.path.splitext(filename)[0])[1]
-            
-            i += run_single_file(args)
-            
-            if(args.max_num_images != -1 and i >= args.max_num_images):
-                break
+            record_args.output_directory = os.path.join(original_output_dir, '/'.join(folder_struct_list))
+            record_args.encoding = os.path.split(os.path.splitext(filename)[0])[1]
+
+            if args.run_in_parallel:
+                record_args.seed += len(records)
+            records.append(record_args)
+
+        if args.run_in_parallel:
+            with ProcessPoolExecutor(max_workers=args.num_workers) as executor:
+                futures = [executor.submit(run_record, record) for record in records]
+                for future in tqdm(as_completed(futures), total=len(futures), desc='ECGs', unit='record'):
+                    future.result()
+        else:
+            i = 0
+            for record in tqdm(records, desc='ECGs', unit='record'):
+                i += run_single_file(record)
+                if args.max_num_images != -1 and i >= args.max_num_images:
+                    break
 
 if __name__=='__main__':
     path = os.path.join(os.getcwd(), sys.argv[0])
