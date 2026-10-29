@@ -16,6 +16,33 @@ from helper_functions import read_config_file
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2' 
 warnings.filterwarnings("ignore")
 
+LEAD_LABELS = {name: i for i, name in enumerate(
+    ("I", "II", "III", "aVR", "aVL", "aVF", "V1", "V2", "V3", "V4", "V5", "V6"), 1
+)}
+
+def save_lead_mask(image_path, data):
+    with Image.open(image_path) as image:
+        width, height = image.size
+    mask = np.zeros((height, width, 3), dtype=np.uint8)
+    x_offset = (width - data["width"]) // 2
+    y_offset = (height - data["height"]) // 2
+
+    for lead in data["leads"]:
+        pixels = np.asarray(lead["plotted_pixels"], dtype=float)
+        if not pixels.size:
+            continue
+        pixels = pixels[np.isfinite(pixels).all(axis=1)].astype(int)
+        y, x = pixels[:, 0], pixels[:, 1]
+        valid = (0 <= y) & (y < data["height"]) & (0 <= x) & (x < data["width"])
+        y, x = y[valid] + y_offset, x[valid] + x_offset
+        valid = (0 <= y) & (y < height) & (0 <= x) & (x < width)
+        label = LEAD_LABELS[lead["lead_name"]]
+        if lead["end_sample"] - lead["start_sample"] > 5 * data["sampling_frequency"]:
+            label += 12
+        mask[y[valid], x[valid], 0] = label
+
+    Image.fromarray(mask).save(os.path.splitext(image_path)[0] + "_mask.png")
+
 def get_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', '--input_file', type=str, required=True)
@@ -130,15 +157,10 @@ def run_single_file(args):
 
         configs = read_config_file(os.path.join(os.getcwd(), args.config_file))
 
-        out_array = get_paper_ecg(input_file=filename,header_file=header, configs=configs, mask_unplotted_samples=args.mask_unplotted_samples, start_index=args.start_index, store_configs=args.store_config, store_text_bbox=args.lead_name_bbox, output_directory=args.output_directory,resolution=resolution,papersize=papersize,add_lead_names=lead,add_dc_pulse=bernoulli_dc,add_bw=bernoulli_bw,show_grid=bernoulli_grid,add_print=bernoulli_add_print,pad_inches=padding,font_type=font,standard_colours=standard_colours,full_mode=args.full_mode,bbox = args.lead_bbox, columns = args.num_columns, seed=args.seed)
+        out_array, json_array = get_paper_ecg(input_file=filename,header_file=header, configs=configs, mask_unplotted_samples=args.mask_unplotted_samples, start_index=args.start_index, store_configs=args.store_config, store_text_bbox=args.lead_name_bbox, output_directory=args.output_directory,resolution=resolution,papersize=papersize,add_lead_names=lead,add_dc_pulse=bernoulli_dc,add_bw=bernoulli_bw,show_grid=bernoulli_grid,add_print=bernoulli_add_print,pad_inches=padding,font_type=font,standard_colours=standard_colours,full_mode=args.full_mode,bbox = args.lead_bbox, columns = args.num_columns, seed=args.seed)
         
-        for out in out_array:
-            if args.store_config:
-                rec_tail, extn = os.path.splitext(out)
-                with open(rec_tail  + '.json', 'r') as file:
-                    json_dict = json.load(file)
-            else:
-                json_dict = None
+        for out, json_dict in zip(out_array, json_array):
+            rec_tail, extn = os.path.splitext(out)
             if(args.fully_random):
                 hw_text = random.choice((True,False))
                 wrinkles = random.choice((True,False))
@@ -221,6 +243,8 @@ def run_single_file(args):
                 
                 with open(rec_tail + '.json', "w") as f:
                     f.write(json_object)
+
+            save_lead_mask(out, json_dict)
 
 
             if args.add_qr_code:

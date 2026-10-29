@@ -244,12 +244,13 @@ def get_paper_ecg(input_file,header_file,output_directory, seed, add_dc_pulse,ad
                 ecg_frame.append(frame)
                 start = start + int(rate*abs_lead_step)
     outfile_array = []
+    json_array = []
     
     name, ext = os.path.splitext(full_header_file)
     write_wfdb_file(segmented_ecg_data, name, rate, header_file, output_directory, full_mode, mask_unplotted_samples)
 
     if len(ecg_frame) == 0:
-        return outfile_array
+        return outfile_array, json_array
 
     start = 0
     for i in range(len(ecg_frame)):
@@ -295,5 +296,6 @@ def get_paper_ecg(input_file,header_file,output_directory, seed, add_dc_pulse,ad
                 f.write(json_object)
 
         outfile_array.append(outfile)
+        json_array.append(json_dict)
         start  += int(rate*abs_lead_step)
-    return outfile_array
+    return outfile_array, json_array
