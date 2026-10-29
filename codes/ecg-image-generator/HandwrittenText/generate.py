@@ -20,6 +20,7 @@ import random
 import cv2
 import sys
 import time
+from io import BytesIO
 
 def get_parser():
     description = 'Create a corpus for medical corpus'
@@ -219,8 +220,10 @@ def get_handwritten(link,num_words,input_file,output_dir,x_offset=0,y_offset=0,h
             ax[i].set_aspect('equal')
             ax[i].set_axis_off()
             i=i+1
-            #Save the plot as HandwrittenText.png
-        fig.savefig('HandwrittenText.png',dpi=1200)
+            #Keep the plot private to this worker when generating in parallel.
+        handwritten_image = BytesIO()
+        fig.savefig(handwritten_image, format='png', dpi=1200)
+        handwritten_image.seek(0)
         img_path = filename
         file_head,file_tail = os.path.splitext(filename)
         boxed_file = file_head + '-boxed' + file_tail
@@ -230,7 +233,7 @@ def get_handwritten(link,num_words,input_file,output_dir,x_offset=0,y_offset=0,h
         #Convert from RGBA to RGB
         img_ecg = img_ecg.convert('RGB')
         #Load the generated handwritten text image
-        img_handwritten = Image.open('HandwrittenText.png')
+        img_handwritten = Image.open(handwritten_image)
         #Convert the generated handwritten text image to RGB
         img_handwritten = img_handwritten.convert('RGB')
         #Resize the handwritten text image
@@ -261,6 +264,6 @@ def get_handwritten(link,num_words,input_file,output_dir,x_offset=0,y_offset=0,h
         plt.clf()
         plt.cla()
         
-        os.remove('HandwrittenText.png')
+        handwritten_image.close()
         outfile = os.path.join(output_dir,tail)
         return outfile
