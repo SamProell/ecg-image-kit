@@ -21,6 +21,7 @@ import cv2
 import sys
 import time
 from io import BytesIO
+from functools import lru_cache
 
 def get_parser():
     description = 'Create a corpus for medical corpus'
@@ -139,13 +140,9 @@ def sample_text(sess, args_text, translation, force,bias,style=None):
 
     return phi_data, window_data, kappa_data, stroke_data, coords
 
-#Main function to add handwritten text to ecg
-def get_handwritten(link,num_words,input_file,output_dir,x_offset=0,y_offset=0,handwriting_size_factor=0.2,model_path=os.path.join(os.path.join('HandwrittenText','pretrained'), 'model-29'),text=None,style=None,bias=1.,force=False,animation=False,noinfo=True,save=None,bbox= False):
-    #Use 'Agg' mode to prevent accumulation of figures
-    matplotlib.use("Agg")
-    filename = input_file
-    
-    #Extract n medical terms
+@lru_cache(maxsize=None)
+def get_medical_terms(link):
+    """Extract terms once per source in each worker process."""
     if(validators.url(link)):
         #Parse URL
         r = requests.get(link)
@@ -175,8 +172,17 @@ def get_handwritten(link,num_words,input_file,output_dir,x_offset=0,y_offset=0,h
             #Extract medical terms using biomedical library
         nlp = spacy.load("en_core_sci_sm")
         doc = nlp(text)
-        #Choose n random words from the extracted list
-    words = random.choices(doc.ents,k=num_words)
+    return tuple(str(entity) for entity in doc.ents)
+
+
+#Main function to add handwritten text to ecg
+def get_handwritten(link,num_words,input_file,output_dir,x_offset=0,y_offset=0,handwriting_size_factor=0.2,model_path=os.path.join(os.path.join('HandwrittenText','pretrained'), 'model-29'),text=None,style=None,bias=1.,force=False,animation=False,noinfo=True,save=None,bbox= False):
+    #Use 'Agg' mode to prevent accumulation of figures
+    matplotlib.use("Agg")
+    filename = input_file
+
+    #Choose fresh random words from the cached medical terms.
+    words = random.choices(get_medical_terms(link),k=num_words)
 
         #Load the pretrained RNN model for handwritten text generation
     with open(os.path.join(os.path.join('HandwrittenText','data'), 'translation.pkl'), 'rb') as file:
