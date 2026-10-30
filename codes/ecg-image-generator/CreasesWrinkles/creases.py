@@ -120,8 +120,15 @@ def minCutPatch(patch, block_size, overlap, res, y, x):
 
 #Main function for image quilting
 def quilt(image_path, block_size, num_block, mode, sequence=False):
-    texture = Image.open(image_path)
-    texture = util.img_as_float(texture)
+    with Image.open(image_path) as source:
+        if num_block == (1, 1):
+            # A single patch has no neighboring overlap to optimize. Sample it
+            # directly instead of checking every possible position in Python.
+            width, height = source.size
+            x = random.randint(0, width - block_size)
+            y = random.randint(0, height - block_size)
+            return np.asarray(source.crop((x, y, x + block_size, y + block_size)))
+        texture = util.img_as_float(source)
     overlap = block_size // 6
     num_blockHigh, num_blockWide = num_block
 
@@ -341,4 +348,3 @@ def get_creased(input_file,output_directory,ifWrinkles=False,ifCreases=False,cre
     cv2.imwrite(filename, img)
     
     return filename
-    
