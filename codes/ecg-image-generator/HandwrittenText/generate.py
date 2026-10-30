@@ -222,7 +222,7 @@ def get_handwritten(link,num_words,input_file,output_dir,x_offset=0,y_offset=0,h
             i=i+1
             #Keep the plot private to this worker when generating in parallel.
         handwritten_image = BytesIO()
-        fig.savefig(handwritten_image, format='png', dpi=1200)
+        fig.savefig(handwritten_image, format='png', dpi=300)
         handwritten_image.seek(0)
         img_path = filename
         file_head,file_tail = os.path.splitext(filename)
