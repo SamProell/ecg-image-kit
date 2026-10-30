@@ -21,7 +21,6 @@ import cv2
 import sys
 import time
 from io import BytesIO
-from contextlib import nullcontext
 from functools import lru_cache
 import atexit
 
@@ -46,7 +45,11 @@ def _load_handwriting_session(model_path):
     graph = tf.Graph()
     with graph.as_default():
         saver = tf.compat.v1.train.import_meta_graph(model_path + '.meta')
-    config = tf.compat.v1.ConfigProto(device_count={'GPU': 0})
+    config = tf.compat.v1.ConfigProto(
+        device_count={'GPU': 0},
+        intra_op_parallelism_threads=1,
+        inter_op_parallelism_threads=1,
+    )
     sess = tf.compat.v1.Session(graph=graph, config=config)
     try:
         saver.restore(sess, model_path)
@@ -204,8 +207,10 @@ def get_handwritten(link,num_words,input_file,output_dir,x_offset=0,y_offset=0,h
 
     translation = _load_translation()
 
-    # The session stays open until this worker exits.
-    with nullcontext(_load_handwriting_session(model_path)) as sess:
+    # Keep the model loaded while preserving the graph/session contexts used by
+    # the original per-image session. These contexts do not close the session.
+    sess = _load_handwriting_session(model_path)
+    with sess.graph.as_default(), sess.as_default():
         #Generate n handwritten words from the selected words
         numw = len(words)
         fig, ax = plt.subplots(numw, 1)
