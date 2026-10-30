@@ -1,4 +1,5 @@
 import pickle
+import atexit
 import argparse
 import numpy as np
 import pandas as pd
@@ -175,6 +176,23 @@ def get_medical_terms(link):
     return tuple(str(entity) for entity in doc.ents)
 
 
+@lru_cache(maxsize=None)
+def get_handwriting_session(model_path):
+    """Load each handwriting model once in a private graph per worker."""
+    graph = tf.Graph()
+    config = tf.compat.v1.ConfigProto(device_count={'GPU': 0})
+    sess = tf.compat.v1.Session(graph=graph, config=config)
+    try:
+        with graph.as_default():
+            saver = tf.compat.v1.train.import_meta_graph(model_path + '.meta')
+            saver.restore(sess, model_path)
+    except Exception:
+        sess.close()
+        raise
+    atexit.register(sess.close)
+    return sess
+
+
 #Main function to add handwritten text to ecg
 def get_handwritten(link,num_words,input_file,output_dir,x_offset=0,y_offset=0,handwriting_size_factor=0.2,model_path=os.path.join(os.path.join('HandwrittenText','pretrained'), 'model-29'),text=None,style=None,bias=1.,force=False,animation=False,noinfo=True,save=None,bbox= False):
     #Use 'Agg' mode to prevent accumulation of figures
@@ -191,14 +209,9 @@ def get_handwritten(link,num_words,input_file,output_dir,x_offset=0,y_offset=0,h
     charset = [rev_translation[i] for i in range(len(rev_translation))]
     charset[0] = ''
 
-    #Configure machine
-    config = tf.compat.v1.ConfigProto(
-        device_count={'GPU': 0}
-    )
-    #Create session 
-    with tf.compat.v1.Session(config=config) as sess:
-        saver = tf.compat.v1.train.import_meta_graph(model_path + '.meta')
-        saver.restore(sess, model_path)
+    sess = get_handwriting_session(model_path)
+    # Collection lookups in sample_text must use this model's graph.
+    with sess.graph.as_default():
         #Generate n handwritten words from the selected words
         numw = len(words)
         fig, ax = plt.subplots(numw, 1)
