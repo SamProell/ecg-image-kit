@@ -21,40 +21,6 @@ import cv2
 import sys
 import time
 from io import BytesIO
-from contextlib import nullcontext
-from functools import lru_cache
-import atexit
-
-@lru_cache(maxsize=1)
-def _load_nlp():
-    return spacy.load("en_core_sci_sm")
-
-@lru_cache(maxsize=None)
-def _terms_from_file(path):
-    with open(path, 'r') as source:
-        text = ' '.join(source.readlines())
-    return tuple(str(entity) for entity in _load_nlp()(text).ents)
-
-@lru_cache(maxsize=1)
-def _load_translation():
-    with open(os.path.join('HandwrittenText', 'data', 'translation.pkl'), 'rb') as source:
-        return pickle.load(source)
-
-@lru_cache(maxsize=None)
-def _load_handwriting_session(model_path):
-    # Each batch worker owns its graph and session, reused across its images.
-    graph = tf.Graph()
-    with graph.as_default():
-        saver = tf.compat.v1.train.import_meta_graph(model_path + '.meta')
-    config = tf.compat.v1.ConfigProto(device_count={'GPU': 0})
-    sess = tf.compat.v1.Session(graph=graph, config=config)
-    try:
-        saver.restore(sess, model_path)
-    except Exception:
-        sess.close()
-        raise
-    atexit.register(sess.close)
-    return sess
 
 def get_parser():
     description = 'Create a corpus for medical corpus'
@@ -111,7 +77,7 @@ def sample_text(sess, args_text, translation, force,bias,style=None):
     fields = ['coordinates', 'sequence', 'bias', 'e', 'pi', 'mu1', 'mu2', 'std1', 'std2',
               'rho', 'window', 'kappa', 'phi', 'finish', 'zero_states']
     vs = namedtuple('Params', fields)(
-        *[sess.graph.get_collection(name)[0] for name in fields]
+        *[tf.compat.v1.get_collection(name)[0] for name in fields]
     )
 
     text = np.array([translation.get(c, 0) for c in args_text])
@@ -195,17 +161,38 @@ def get_handwritten(link,num_words,input_file,output_dir,x_offset=0,y_offset=0,h
             if text.parent.name not in ['script', 'meta', 'link', 'style'] and not isinstance(text, Comment) and text != '\n':
                 medicalText = medicalText + text.strip()
         #Extract medical terms using space biomedical library
-        words = random.choices(_load_nlp()(medicalText).ents, k=num_words)
+        nlp = spacy.load("en_core_sci_sm")
+        doc = nlp(medicalText)
     else:
         #Extract medical terms from .txt files
         if link == '':
             link = 'HandwrittenText/Biomedical.txt'
-        words = random.choices(_terms_from_file(link), k=num_words)
+        with open(link, 'r') as f:
+        #Extract lines from the file
+            text = ""
+            for line in f.readlines():
+                text = text + " " + line
+            #Extract medical terms using biomedical library
+        nlp = spacy.load("en_core_sci_sm")
+        doc = nlp(text)
+        #Choose n random words from the extracted list
+    words = random.choices(doc.ents,k=num_words)
 
-    translation = _load_translation()
+        #Load the pretrained RNN model for handwritten text generation
+    with open(os.path.join(os.path.join('HandwrittenText','data'), 'translation.pkl'), 'rb') as file:
+        translation = pickle.load(file)
+    rev_translation = {v: k for k, v in translation.items()}
+    charset = [rev_translation[i] for i in range(len(rev_translation))]
+    charset[0] = ''
 
-    # The session stays open until this worker exits.
-    with nullcontext(_load_handwriting_session(model_path)) as sess:
+    #Configure machine
+    config = tf.compat.v1.ConfigProto(
+        device_count={'GPU': 0}
+    )
+    #Create session 
+    with tf.compat.v1.Session(config=config) as sess:
+        saver = tf.compat.v1.train.import_meta_graph(model_path + '.meta')
+        saver.restore(sess, model_path)
         #Generate n handwritten words from the selected words
         numw = len(words)
         fig, ax = plt.subplots(numw, 1)
